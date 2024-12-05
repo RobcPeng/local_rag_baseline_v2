@@ -3,18 +3,22 @@ from src.utils.model_utilities import EmbeddingModel, RerankModel
 import torch
 
 def test_llama():
+    print("\nLLM Chat Test:")
     llm = LlamaModel()
-    response = llm.chat([{"role": "user", "content": "Write a short poem about AI"}])
-    print("\nLLM Test:")
-    print(response['choices'][0]['message']['content'])
-
+    chat_response = llm.chat(
+        messages=[{"role": "user", "content": "Write a short poem about AI"}],
+        max_tokens=200,  # Add a limit to prevent hanging
+        temperature=0.7
+    )
+    print(chat_response['choices'][0]['message']['content'])
+    
 def test_embeddings():
     embed_model = EmbeddingModel()
     texts = ["This is a test sentence", "Another test sentence"]
     embeddings = embed_model.embed(texts)
     print("\nEmbedding Test:")
     print(f"Embedding shape: {embeddings.shape}")
-    print(f"Embedding device: {torch.tensor(embeddings).device}")
+    print(f"Embedding device: {embeddings.device}")
 
 def test_reranker():
     rerank_model = RerankModel()
@@ -35,6 +39,6 @@ def test_reranker():
 
 if __name__ == "__main__":
     print("Testing Models...")
-    # test_llama()
+    test_llama()
     test_embeddings()
     test_reranker()
