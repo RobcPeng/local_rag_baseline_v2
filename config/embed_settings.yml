@@ -1,0 +1,11 @@
+paths:
+  model:
+    dir: "models/embeddings"
+    file: "nv-embed-v2"
+
+model:
+  download_url: "nvidia/NV-Embed-v2"
+  max_length: 512
+  batch_size: 32
+  device: "auto" # auto, cuda, cpu
+  trust_remote_code: True

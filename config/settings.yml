@@ -1,0 +1,11 @@
+paths:
+  model:
+    dir: "models/gguf"
+    file: "mistral-7b-v0.1.Q8_0.gguf"
+
+model:
+  download_url: "https://huggingface.co/TheBloke/Mistral-7B-v0.1-GGUF/resolve/main/mistral-7b-v0.1.Q8_0.gguf"
+  n_ctx: 32768
+  cuda:
+    n_batch: 512
+    gpu_layers_max_batch_size: 512
