@@ -50,13 +50,13 @@ class RerankModel:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         model_path = self.config['paths']['model']['dir']
         
-        model = AutoModelForSequenceClassification.from_pretrained(
+        AutoModelForSequenceClassification.from_pretrained(
             self.config['model']['download_url'],
             cache_dir=model_path,
             trust_remote_code=self.config['model']['trust_remote_code']
         )
-        
-        tokenizer = AutoTokenizer.from_pretrained(
+
+        AutoTokenizer.from_pretrained(
             self.config['model']['download_url'],
             cache_dir=model_path,
             trust_remote_code=self.config['model']['trust_remote_code']
@@ -64,8 +64,6 @@ class RerankModel:
         
         return CrossEncoder(
             model_name=self.config['model']['download_url'],
-            model=model,
-            tokenizer=tokenizer,
             device=device,
             max_length=self.config['model']['max_length']
         )
@@ -76,4 +74,5 @@ class RerankModel:
             pairs,
             batch_size=self.config['model']['batch_size']
         )
+        print(scores)
         return scores

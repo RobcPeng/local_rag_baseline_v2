@@ -20,14 +20,18 @@ def test_reranker():
     rerank_model = RerankModel()
     query = "What is machine learning?"
     passages = [
-        "Machine learning is a branch of AI",
-        "Deep learning is a subset of machine learning",
-        "Python is a programming language"
+        "Machine learning is a branch of artificial intelligence that enables computers to learn from data.",
+        "Deep learning is a subset of machine learning that uses neural networks.",
+        "Python is a popular programming language used in data science.",
+        "AI and machine learning are transforming many industries today.",
+        "Data science combines statistics, programming, and domain expertise."
     ]
-    scores = rerank_model.rerank(query, passages)
+    
+    scored_passages = rerank_model.rerank(query, passages)
     print("\nReranker Test:")
-    for score, passage in zip(scores, passages):
-        print(f"Score: {score:.3f} | Passage: {passage}")
+    print(f"Query: {query}\n")
+    for score, passage in zip(scored_passages, passages):
+        print(f"Score: {score:.3f} | {passage}")
 
 if __name__ == "__main__":
     print("Testing Models...")
