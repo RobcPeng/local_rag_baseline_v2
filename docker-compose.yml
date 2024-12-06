@@ -12,6 +12,7 @@ services:
       - "9300:9300"
     volumes:
       - ./elastic_data:/usr/share/elasticsearch/data
+    user: "1000:1000"
     networks:
       - elastic
     restart: unless-stopped

@@ -1,10 +1,10 @@
 paths:
   model:
     dir: "models/embeddings"
-    file: "nv-embed-v2"
+    file: "stella_v5"
 
 model:
-  download_url: "nvidia/NV-Embed-v2"
+  download_url: "dunzhang/stella_en_1.5B_v5"
   max_length: 512
   batch_size: 32
   device: "auto" # auto, cuda, cpu

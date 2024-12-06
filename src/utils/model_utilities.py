@@ -57,7 +57,7 @@ class EmbeddingModel:
             cache_dir=model_path,
             device_map="balanced",
             max_memory=max_memory,
-            torch_dtype=torch.float16,  # Use half precision
+            torch_dtype=torch.float32,  # Use half precision
             trust_remote_code=self.config['model']['trust_remote_code']
         )
 
