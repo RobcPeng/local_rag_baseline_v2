@@ -15,9 +15,11 @@ import pytesseract
 from PIL import Image, ImageEnhance
 import pdf2image
 import tempfile
+import numpy as np
+
 
 class DocumentProcessor:
-    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 50):
+    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.embedding_model = EmbeddingModel()
@@ -26,58 +28,52 @@ class DocumentProcessor:
     def process_file(self, file_path: Union[str, Path], custom_metadata: Dict = None) -> List[Dict]:
         """
         Process a single file and return chunks with metadata
-        
-        Args:
-            file_path: Path to the document
-            custom_metadata: Dictionary of custom metadata fields (e.g., {"user_id": "123", "access_level": "confidential"})
         """
         file_path = Path(file_path)
         file_type = magic.from_file(str(file_path), mime=True)
-        
+
         # Extract text based on file type
         if file_type == "application/pdf":
             if self._is_scanned_pdf(file_path):
-                pages = self._extract_with_ocr(file_path)
+                text = self._extract_with_ocr(file_path)
             else:
-                pages = self._extract_pdf_with_pages(file_path)
+                text = self._extract_pdf_text(file_path)
         elif file_type.startswith("image/"):
-            pages = self._extract_with_ocr(file_path)
+            text = self._extract_with_ocr(file_path)
         elif file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            pages = self._extract_docx_with_pages(file_path)
+            text = self._extract_docx_text(file_path)
         else:
-            # Use unstructured for other file types
             elements = partition(filename=str(file_path))
-            pages = [{"text": "\n".join([str(element) for element in elements]), "page": 1}]
+            text = "\n".join([str(element) for element in elements])
         
         # Prepare documents with metadata
         documents = []
-        chunk_index = 0
+        chunks = self._create_chunks(text)
         
-        for page in pages:
-            chunks = self._create_chunks(page["text"])
+        for chunk_index, chunk in enumerate(chunks):
+            doc_id = self._generate_doc_id(file_path, chunk, chunk_index)
             
-            for chunk in chunks:
-                doc_id = self._generate_doc_id(file_path, chunk, chunk_index)
-                
-                # Combine default and custom metadata
-                metadata = {
-                    "source": str(file_path),
-                    "file_type": file_type,
-                    "chunk_index": chunk_index,
-                    "page_number": page["page"],
-                    "processed_date": datetime.now().isoformat(),
-                    "doc_id": doc_id
-                }
-                
-                # Add custom metadata if provided
-                if custom_metadata:
-                    metadata.update(custom_metadata)
-                
-                documents.append({
-                    "content": chunk,
-                    "metadata": metadata
-                })
-                chunk_index += 1
+            # Get embedding and handle potential NaN values
+            embedding = self.embedding_model.embed([chunk])[0]
+            # Convert to Python float and replace NaN with 0
+            embedding = [float(x) if not np.isnan(x) else 0.0 for x in embedding.tolist()]
+            
+            metadata = {
+                "source": str(file_path),
+                "file_type": file_type,
+                "chunk_index": chunk_index,
+                "processed_date": datetime.now().isoformat(),
+                "doc_id": doc_id
+            }
+            
+            if custom_metadata:
+                metadata.update(custom_metadata)
+            
+            documents.append({
+                "content": chunk,
+                "embedding": embedding,
+                "metadata": metadata
+            })
         
         return documents
 
@@ -110,100 +106,100 @@ class DocumentProcessor:
         image = enhancer.enhance(2)
         return image
 
-    def _extract_with_ocr(self, file_path: Path) -> List[Dict]:
+    def _extract_with_ocr(self, file_path: Path) -> str:
         """Extract text from images and scanned PDFs using OCR"""
-        pages = []
+        text_content = []
         
         # If PDF, convert to images first
         if file_path.suffix.lower() == '.pdf':
             # Convert PDF to images
             pdf_images = pdf2image.convert_from_path(file_path)
             
-            for page_num, image in enumerate(pdf_images, 1):
+            for image in pdf_images:
                 # Preprocess image
                 processed_image = self._preprocess_image(image)
                 # Perform OCR
-                text = pytesseract.image_to_string(processed_image)
-                pages.append({
-                    "text": text,
-                    "page": page_num
-                })
+                text_content.append(pytesseract.image_to_string(processed_image))
                 
         # For image files
         elif file_path.suffix.lower() in ['.png', '.jpg', '.jpeg', '.tiff', '.bmp']:
             image = Image.open(file_path)
             processed_image = self._preprocess_image(image)
-            text = pytesseract.image_to_string(processed_image)
-            pages.append({
-                "text": text,
-                "page": 1
-            })
+            text_content.append(pytesseract.image_to_string(processed_image))
             
-        return pages
+        return "\n".join(text_content)
     
-    def _extract_pdf_with_pages(self, file_path: Path) -> List[Dict]:
-        """Extract text from PDF files with page numbers"""
-        pages = []
+    def _extract_pdf_text(self, file_path: Path) -> str:
+        """Extract text from PDF files"""
+        text_content = []
         with open(file_path, 'rb') as file:
             pdf_reader = pypdf.PdfReader(file)
-            for page_num, page in enumerate(pdf_reader.pages, 1):
-                pages.append({
-                    "text": page.extract_text(),
-                    "page": page_num
-                })
-        return pages
+            for page in pdf_reader.pages:
+                text_content.append(page.extract_text())
+        return "\n".join(text_content)
     
-    def _extract_docx_with_pages(self, file_path: Path) -> List[Dict]:
-        """Extract text from DOCX files with page numbers"""
+    def _extract_docx_text(self, file_path: Path) -> str:
+        """Extract text from DOCX files"""
         doc = docx.Document(file_path)
-        current_text = ""
-        pages = []
-        estimated_page = 1
-        chars_per_page = 3000  # Approximate characters per page
-        
-        for paragraph in doc.paragraphs:
-            current_text += paragraph.text + "\n"
-            
-            # Estimate page breaks based on character count
-            if len(current_text) >= chars_per_page:
-                pages.append({
-                    "text": current_text,
-                    "page": estimated_page
-                })
-                current_text = ""
-                estimated_page += 1
-        
-        # Add remaining text
-        if current_text:
-            pages.append({
-                "text": current_text,
-                "page": estimated_page
-            })
-        
-        return pages
+        return "\n".join(paragraph.text for paragraph in doc.paragraphs)
     
     def _create_chunks(self, text: str) -> List[str]:
-        """Split text into overlapping chunks"""
+        """
+        Split text into overlapping chunks, ensuring words are not broken.
+        Returns non-empty chunks that maintain word boundaries.
+        """
         chunks = []
+        if not text.strip():
+            return chunks
+            
         start = 0
         text_length = len(text)
-        
+
         while start < text_length:
-            end = start + self.chunk_size
-            chunk = text[start:end]
-            chunks.append(chunk)
-            start = end - self.chunk_overlap
+            # Calculate initial end point
+            end = min(start + self.chunk_size, text_length)
             
+            # If we're not at the text end, adjust to not break words
+            if end < text_length:
+                # Find the last space or newline before the end
+                while end > start and not text[end - 1].isspace():
+                    end -= 1
+                # If no space found in chunk, find the next space
+                if end <= start:
+                    end = min(start + self.chunk_size, text_length)
+                    # If we're still not at the end, find the next space
+                    if end < text_length:
+                        next_space = text.find(' ', end)
+                        if next_space != -1:
+                            end = next_space
+            
+            # Extract the chunk and clean it
+            chunk = text[start:end].strip()
+            if chunk:  # Only add non-empty chunks
+                chunks.append(chunk)
+            
+            # Calculate next start position with overlap
+            if end >= text_length:
+                break
+                
+            # Move back from end by overlap amount
+            start = max(0, end - self.chunk_overlap)
+            # Ensure we start at a word boundary
+            while start < text_length and start > 0 and not text[start - 1].isspace():
+                start += 1
+
         return chunks
-    
+        
     def _generate_doc_id(self, file_path: Path, chunk: str, chunk_index: int) -> str:
         """Generate a unique document ID"""
         content = f"{file_path}{chunk}{chunk_index}"
         return hashlib.sha256(content.encode()).hexdigest()
     
-    def index_documents(self, documents: List[Dict], index_name: str):
-        """Index documents with their embeddings to Elasticsearch"""
-        # Create index if it doesn't exist
+    def index_documents(self, documents: List[Dict], index_name: str = "documents"):
+        """Index documents with their embeddings"""
+        # Create index if doesn't exist
+        print("local test")
+        print(self.embedding_model.model.config.hidden_size)
         if not self.es_client.indices.exists(index=index_name):
             self.es_client.indices.create(
                 index=index_name,
@@ -221,10 +217,8 @@ class DocumentProcessor:
                                 "source": {"type": "keyword"},
                                 "file_type": {"type": "keyword"},
                                 "chunk_index": {"type": "integer"},
-                                "page_number": {"type": "integer"},
                                 "processed_date": {"type": "date"},
                                 "doc_id": {"type": "keyword"},
-                                # Dynamic mapping for custom metadata
                                 "user_id": {"type": "keyword"},
                                 "access_level": {"type": "keyword"},
                                 "organization": {"type": "keyword"},
@@ -234,27 +228,22 @@ class DocumentProcessor:
                     }
                 }
             )
-        
-        # Process documents in batches
-        batch_size = 8
+
+        # Process in batches
+        batch_size = 1
         for i in tqdm(range(0, len(documents), batch_size)):
             batch = documents[i:i + batch_size]
-            
-            # Get embeddings for the batch
-            texts = [doc["content"] for doc in batch]
-            embeddings = self.embedding_model.embed(texts)
-            
-            # Prepare bulk indexing operations
             operations = []
-            for doc, embedding in zip(batch, embeddings):
+            
+            for doc in batch:
                 operations.extend([
                     {"index": {"_index": index_name, "_id": doc["metadata"]["doc_id"]}},
                     {
                         "content": doc["content"],
-                        "embedding": embedding.tolist(),
+                        "embedding": doc["embedding"],
                         "metadata": doc["metadata"]
                     }
                 ])
             
-            # Index the batch
-            self.es_client.bulk(operations=operations)
+            # Index batch
+            self.es_client.bulk(operations=operations, refresh=True)

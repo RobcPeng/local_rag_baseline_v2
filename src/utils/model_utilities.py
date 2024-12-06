@@ -9,12 +9,6 @@ import os
 import gc
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
-print(f"Available GPUs: {torch.cuda.device_count()}")
-print(torch.version.cuda)
-
-for i in range(torch.cuda.device_count()):
-    print(f"GPU {i}: {torch.cuda.get_device_name(i)}")
-
 
 class EmbeddingModel:
     def __init__(self):
@@ -57,9 +51,11 @@ class EmbeddingModel:
             cache_dir=model_path,
             device_map="balanced",
             max_memory=max_memory,
-            torch_dtype=torch.float32,  # Use half precision
+            torch_dtype=torch.float16,  # Use half precision
             trust_remote_code=self.config['model']['trust_remote_code']
         )
+        embedding_dims = model.config.hidden_size  # Extract directly from model config
+        print(f"Loaded model with embedding dimensions: {embedding_dims}")
 
         return tokenizer, model
 
@@ -91,9 +87,7 @@ class EmbeddingModel:
                 
                 with torch.no_grad():
                     try:
-                        outputs = self.model(**batch_inputs)
-                        print(f"Model output keys: {outputs.keys()}")  # Debug print
-                        
+                        outputs = self.model(**batch_inputs)                        
                         # Handle model output based on its structure
                         if isinstance(outputs, dict):
                             if 'embeddings' in outputs:

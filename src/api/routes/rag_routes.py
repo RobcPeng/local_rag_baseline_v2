@@ -4,6 +4,13 @@ from src.utils.elasticsearch_utils import ElasticsearchClient
 from src.utils.model_utilities import RerankModel
 from langchain.prompts import PromptTemplate
 import torch
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 bp = Blueprint('rag', __name__, url_prefix='/api/rag')
 
@@ -53,7 +60,7 @@ Answer: """
         """Generate response using LLM with optional custom prompt"""
         template = prompt_template or self.default_prompt_template
         prompt = PromptTemplate.from_template(template).format(
-            context=context,
+            context=context,    
             question=question
         )
         
@@ -74,33 +81,42 @@ def query():
         question = data['question']
         k = data.get('k', 5)
         system_prompt = data.get('system_prompt')
-        prompt_template = data.get('prompt_template')
+        
+        logger.info(f"Processing RAG query: {question}")
         
         rag = RAGService(system_prompt=system_prompt)
         
-        # Retrieve and combine contexts
+        # Retrieve relevant contexts
         contexts = rag.retrieve(question, k)
+        logger.info(f"Retrieved {len(contexts)} contexts")
+        
+        if not contexts:
+            return jsonify({
+                'answer': "I couldn't find any relevant information to answer your question.",
+                'contexts': [],
+                'status': 'no_contexts'
+            })
+        
+        # Combine contexts
         combined_context = "\n\n".join(contexts)
         
-        # Generate response with optional custom prompt
-        response = rag.generate_response(
-            question, 
-            combined_context,
-            prompt_template=prompt_template
-        )
+        # Generate response
+        response = rag.generate_response(question, combined_context)
         
         return jsonify({
             'answer': response,
             'contexts': contexts,
-            'system_prompt': rag.system_prompt,
-            'prompt_template': prompt_template or rag.default_prompt_template
+            'prompt_template': rag.default_prompt_template,
+            'system_prompt': rag.system_prompt
         })
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        logger.error(f"Error in RAG query endpoint: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'details': 'Error processing RAG query',
+            'status': 'query_error'
+        }), 500
 
 @bp.route('/custom_query', methods=['POST'])
 def custom_query():

@@ -4,6 +4,7 @@ from pathlib import Path
 import logging
 import json
 import traceback
+from src.utils.elasticsearch_utils import ElasticsearchClient
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -74,3 +75,9 @@ def process_document():
                 logger.debug(f"Cleaned up temporary file: {temp_path}")
         except Exception as cleanup_error:
             logger.error(f"Error during cleanup: {cleanup_error}")
+
+@bp.route('/status', methods=['GET'])
+def check_status():
+    es_client = ElasticsearchClient()
+    verification = es_client.verify_document_structure("documents")
+    return jsonify(verification)
